@@ -189,11 +189,11 @@ async function deleteJob() {
 
 function copyURL() {
   const url = document.getElementById('url-preview')?.textContent;
-  if (url) navigator.clipboard.writeText(url);
+  if (url && navigator.clipboard) navigator.clipboard.writeText(url);
 }
 
 function esc(s) {
-  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 document.getElementById('new-job-btn').addEventListener('click', () => {
