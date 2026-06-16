@@ -51,6 +51,7 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(1)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		db.Close()
@@ -121,7 +122,7 @@ func (s *Store) ListJobs() ([]Job, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var jobs []Job
+	jobs := []Job{}
 	for rows.Next() {
 		j, err := scanJob(rows)
 		if err != nil {
@@ -148,7 +149,10 @@ func (s *Store) UpdateJob(j *Job) error {
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return fmt.Errorf("job %q not found", j.ID)
 	}
@@ -156,8 +160,18 @@ func (s *Store) UpdateJob(j *Job) error {
 }
 
 func (s *Store) DeleteJob(id string) error {
-	_, err := s.db.Exec(`DELETE FROM jobs WHERE id=?`, id)
-	return err
+	res, err := s.db.Exec(`DELETE FROM jobs WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("job %q not found", id)
+	}
+	return nil
 }
 
 type scanner interface {
@@ -215,6 +229,9 @@ func (s *Store) GetSession(id string) (*Session, error) {
 	if err := json.Unmarshal([]byte(varsJSON), &sess.Vars); err != nil {
 		return nil, err
 	}
+	if sess.Vars == nil {
+		sess.Vars = map[string]string{}
+	}
 	return &sess, nil
 }
 
@@ -251,7 +268,7 @@ func (s *Store) ListPanes(sessionID string) ([]Pane, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var panes []Pane
+	panes := []Pane{}
 	for rows.Next() {
 		var p Pane
 		if err := rows.Scan(&p.ID, &p.SessionID, &p.CmdIndex, &p.PID, &p.Alive, &p.OutputPath); err != nil {
@@ -263,11 +280,31 @@ func (s *Store) ListPanes(sessionID string) ([]Pane, error) {
 }
 
 func (s *Store) SetPaneAlive(id string, alive bool) error {
-	_, err := s.db.Exec(`UPDATE panes SET alive=? WHERE id=?`, alive, id)
-	return err
+	res, err := s.db.Exec(`UPDATE panes SET alive=? WHERE id=?`, alive, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("pane %q not found", id)
+	}
+	return nil
 }
 
 func (s *Store) SetPanePID(id string, pid int) error {
-	_, err := s.db.Exec(`UPDATE panes SET pid=? WHERE id=?`, pid, id)
-	return err
+	res, err := s.db.Exec(`UPDATE panes SET pid=? WHERE id=?`, pid, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("pane %q not found", id)
+	}
+	return nil
 }
