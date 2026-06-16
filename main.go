@@ -69,10 +69,14 @@ func main() {
 			http.ServeFileFS(w, r, sub, "editor.html")
 			return
 		}
-		// Try API mux first; if it returns 404, try file server
+		// Try API mux first; if it returns 404, try file server.
+		// The mux's 404 handler writes Content-Type and X-Content-Type-Options
+		// to the header map before we can intercept it, so clear them first.
 		rw := &statusRecorder{ResponseWriter: w}
 		mux.ServeHTTP(rw, r)
 		if rw.status == http.StatusNotFound {
+			w.Header().Del("Content-Type")
+			w.Header().Del("X-Content-Type-Options")
 			fileServer.ServeHTTP(w, r)
 		}
 	})
