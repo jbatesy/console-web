@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +17,11 @@ import (
 	"console-web/internal/pty"
 	"console-web/internal/session"
 )
+
+func init() {
+	mime.AddExtensionType(".js", "application/javascript")
+	mime.AddExtensionType(".css", "text/css")
+}
 
 //go:embed frontend
 var frontendFS embed.FS
