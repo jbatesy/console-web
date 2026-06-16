@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"embed"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 
@@ -91,4 +94,12 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 		return len(b), nil // discard the 404 body
 	}
 	return r.ResponseWriter.Write(b)
+}
+
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := r.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
+	}
+	return h.Hijack()
 }

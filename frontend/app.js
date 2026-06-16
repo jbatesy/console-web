@@ -120,6 +120,12 @@
     }
   } catch (err) {
     const c = document.getElementById('terminal-container');
-    if (c) c.innerHTML = `<div class="exited-banner">Failed to load session: ${err.message}</div>`;
+    if (c) {
+      const d = document.createElement('div');
+      d.className = 'exited-banner';
+      d.textContent = `Failed to load session: ${err.message}`;
+      c.innerHTML = '';
+      c.appendChild(d);
+    }
   }
 })();

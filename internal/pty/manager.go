@@ -150,11 +150,8 @@ func (m *Manager) AddClient(paneID string, conn *websocket.Conn, outputPath stri
 	ch := make(chan []byte, 256)
 	cl := &client{conn: conn, send: ch}
 
-	ps.mu.Lock()
-	ps.clients[conn] = cl
-	ps.mu.Unlock()
-
-	// Replay scrollback in a goroutine so we don't hold the lock
+	// Replay scrollback before registering the client so live PTY output
+	// cannot arrive in the channel before the historical scrollback.
 	go func() {
 		if data, err := os.ReadFile(outputPath); err == nil && len(data) > 0 {
 			sentinel := []byte("\r\n\033[33m--- scrollback start ---\033[0m\r\n")
@@ -163,7 +160,6 @@ func (m *Manager) AddClient(paneID string, conn *websocket.Conn, outputPath stri
 			case <-ps.done:
 				return
 			}
-			// send in chunks to avoid oversized messages
 			for len(data) > 0 {
 				sz := 4096
 				if sz > len(data) {
@@ -179,6 +175,10 @@ func (m *Manager) AddClient(paneID string, conn *websocket.Conn, outputPath stri
 				data = data[sz:]
 			}
 		}
+		// Register only after replay is fully queued.
+		ps.mu.Lock()
+		ps.clients[conn] = cl
+		ps.mu.Unlock()
 	}()
 
 	return ch, ps.done, nil

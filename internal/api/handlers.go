@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 
 	"console-web/internal/db"
 	"console-web/internal/pty"
@@ -101,6 +102,10 @@ func (h *Handler) updateJob(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) deleteJob(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.DeleteJob(r.PathValue("id")); err != nil {
+		if strings.Contains(err.Error(), "FOREIGN KEY constraint") {
+			http.Error(w, "job has existing sessions and cannot be deleted", http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
