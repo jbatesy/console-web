@@ -1,0 +1,72 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #1a1a2e;
+  --surface: #0d0d1a;
+  --surface2: #111124;
+  --border: #2d2d4e;
+  --text: #ccc;
+  --text-dim: #666;
+  --accent: #7eb8f7;
+  --green: #00ff88;
+  --red: #ff6b6b;
+  --yellow: #f7c948;
+}
+
+body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Nav */
+nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 16px; height: 40px; display: flex; align-items: center; gap: 20px; flex-shrink: 0; }
+nav .brand { color: var(--accent); font-weight: 600; font-size: 14px; text-decoration: none; }
+nav a { color: var(--text-dim); font-size: 13px; text-decoration: none; }
+nav a:hover { color: var(--text); }
+
+/* Tab bar */
+#tab-bar { background: var(--surface2); border-bottom: 1px solid var(--border); display: flex; overflow-x: auto; flex-shrink: 0; }
+.tab { padding: 8px 16px; font-size: 12px; font-family: monospace; color: var(--text-dim); cursor: pointer; border-right: 1px solid var(--border); white-space: nowrap; user-select: none; }
+.tab:hover { color: var(--text); background: var(--surface); }
+.tab.active { color: var(--accent); background: var(--bg); border-bottom: 2px solid var(--accent); }
+.tab .status { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-right: 6px; }
+.tab .status.dead { background: var(--text-dim); }
+
+/* Terminal area */
+#terminal-container { flex: 1; overflow: hidden; position: relative; }
+.terminal-pane { position: absolute; inset: 0; display: none; padding: 4px; }
+.terminal-pane.active { display: block; }
+.exited-banner { color: var(--text-dim); font-family: monospace; font-size: 13px; padding: 20px; }
+
+/* Editor layout */
+#editor-layout { display: flex; flex: 1; overflow: hidden; }
+#job-list { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+#job-list-items { flex: 1; overflow-y: auto; padding: 8px 0; }
+.job-item { padding: 8px 16px; font-size: 13px; cursor: pointer; color: var(--text-dim); }
+.job-item:hover { color: var(--text); background: var(--surface2); }
+.job-item.active { color: var(--accent); background: var(--bg); }
+#new-job-btn { margin: 8px; padding: 8px; background: transparent; border: 1px dashed var(--border); border-radius: 4px; color: var(--green); cursor: pointer; font-size: 12px; }
+#new-job-btn:hover { border-color: var(--green); }
+
+/* Editor panel */
+#editor-panel { flex: 1; overflow-y: auto; padding: 24px; }
+#editor-panel h2 { font-size: 16px; color: var(--accent); margin-bottom: 20px; }
+.field-group { margin-bottom: 16px; }
+label { display: block; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+input[type=text] { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 7px 10px; color: var(--text); font-size: 13px; font-family: inherit; }
+input[type=text]:focus { outline: none; border-color: var(--accent); }
+.section-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; margin: 20px 0 8px; display: flex; align-items: center; justify-content: space-between; }
+.add-btn { background: none; border: 1px solid var(--border); border-radius: 3px; color: var(--green); padding: 2px 8px; font-size: 11px; cursor: pointer; }
+.add-btn:hover { border-color: var(--green); }
+.row-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 10px; margin-bottom: 6px; display: grid; gap: 6px; }
+.row-item.cmd-row { grid-template-columns: 1fr 2fr auto; align-items: start; }
+.row-item.var-row { grid-template-columns: 1fr 1fr 1fr auto; align-items: start; }
+.remove-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 16px; padding: 2px 6px; }
+.remove-btn:hover { color: var(--red); }
+.action-bar { margin-top: 24px; display: flex; gap: 10px; align-items: center; }
+.btn { padding: 8px 18px; border-radius: 4px; border: none; font-size: 13px; cursor: pointer; }
+.btn-primary { background: var(--accent); color: var(--bg); font-weight: 600; }
+.btn-primary:hover { opacity: .9; }
+.btn-danger { background: transparent; border: 1px solid var(--red); color: var(--red); }
+.btn-danger:hover { background: var(--red); color: var(--bg); }
+.btn-copy { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
+.btn-copy:hover { border-color: var(--accent); color: var(--accent); }
+.url-preview { font-family: monospace; font-size: 12px; color: var(--yellow); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; margin-top: 16px; word-break: break-all; }
+.empty-state { color: var(--text-dim); font-size: 13px; padding: 40px 0; text-align: center; }
