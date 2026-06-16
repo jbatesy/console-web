@@ -17,8 +17,8 @@ body { background: var(--bg); color: var(--text); font-family: system-ui, sans-s
 
 /* Nav */
 nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 16px; height: 40px; display: flex; align-items: center; gap: 20px; flex-shrink: 0; }
-nav .brand { color: var(--accent); font-weight: 600; font-size: 14px; text-decoration: none; }
 nav a { color: var(--text-dim); font-size: 13px; text-decoration: none; }
+nav a.brand { color: var(--accent); font-weight: 600; font-size: 14px; }
 nav a:hover { color: var(--text); }
 
 /* Tab bar */
@@ -31,7 +31,7 @@ nav a:hover { color: var(--text); }
 
 /* Terminal area */
 #terminal-container { flex: 1; overflow: hidden; position: relative; }
-.terminal-pane { position: absolute; inset: 0; display: none; padding: 4px; }
+.terminal-pane { position: absolute; inset: 0; display: none; }
 .terminal-pane.active { display: block; }
 .exited-banner { color: var(--text-dim); font-family: monospace; font-size: 13px; padding: 20px; }
 
