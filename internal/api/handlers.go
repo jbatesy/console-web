@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 
 	"console-web/internal/db"
@@ -100,7 +101,7 @@ func (h *Handler) updateJob(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) deleteJob(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.DeleteJob(r.PathValue("id")); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -170,7 +171,9 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 	if len(errs) > 0 {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		errPageTmpl.Execute(w, map[string]any{"JobID": jobID, "Errors": errs})
+		if err := errPageTmpl.Execute(w, map[string]any{"JobID": jobID, "Errors": errs}); err != nil {
+			log.Printf("error rendering validation error page: %v", err)
+		}
 		return
 	}
 

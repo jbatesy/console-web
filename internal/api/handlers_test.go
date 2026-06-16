@@ -84,6 +84,18 @@ func TestDeleteJob(t *testing.T) {
 	}
 }
 
+func TestDeleteJobNotFound(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := h.Routes()
+
+	req := httptest.NewRequest("DELETE", "/api/jobs/nonexistent", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
 func TestJobLaunchRedirect(t *testing.T) {
 	h, store := newTestHandler(t)
 	mux := h.Routes()
