@@ -38,6 +38,7 @@ func (h *Handler) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	conn.SetReadLimit(1 << 20) // 1 MB max incoming frame
 
 	sendCh, doneCh, err := h.ptyMgr.AddClient(paneID, conn, pane.OutputPath)
 	if err != nil {
@@ -83,7 +84,9 @@ func (h *Handler) handleWS(w http.ResponseWriter, r *http.Request) {
 		case websocket.TextMessage:
 			var msg resizeMsg
 			if err := json.Unmarshal(data, &msg); err == nil && msg.Type == "resize" {
-				h.ptyMgr.Resize(paneID, msg.Cols, msg.Rows)
+				if err := h.ptyMgr.Resize(paneID, msg.Cols, msg.Rows); err != nil {
+					log.Printf("pty resize %s: %v", paneID, err)
+				}
 			}
 		}
 	}
