@@ -76,15 +76,13 @@ func main() {
 
 type statusRecorder struct {
 	http.ResponseWriter
-	status  int
-	written bool
+	status int
 }
 
 func (r *statusRecorder) WriteHeader(status int) {
 	r.status = status
 	if status != http.StatusNotFound {
 		r.ResponseWriter.WriteHeader(status)
-		r.written = true
 	}
 }
 
