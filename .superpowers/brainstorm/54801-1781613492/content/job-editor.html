@@ -1,0 +1,96 @@
+<h2>Job Editor UI</h2>
+<p class="subtitle">How the job configuration screen looks — click to select a direction</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;border-radius:6px;font-family:sans-serif;font-size:11px;overflow:hidden">
+        <div style="background:#0d0d1a;padding:6px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #333">
+          <span style="color:#7eb8f7;font-weight:600">console-web</span>
+          <div style="display:flex;gap:8px">
+            <span style="color:#888;font-size:9px">Jobs</span>
+            <span style="color:#555;font-size:9px">Settings</span>
+          </div>
+        </div>
+        <div style="display:flex;height:160px">
+          <div style="width:100px;background:#111;border-right:1px solid #333;padding:8px">
+            <div style="color:#555;font-size:9px;margin-bottom:6px;text-transform:uppercase">Jobs</div>
+            <div style="color:#7eb8f7;background:#2d2d4e;padding:3px 6px;border-radius:3px;font-size:9px;margin-bottom:3px">deploy-check</div>
+            <div style="color:#555;padding:3px 6px;font-size:9px;margin-bottom:3px">log-tail</div>
+            <div style="color:#555;padding:3px 6px;font-size:9px;margin-bottom:6px">db-health</div>
+            <div style="color:#00ff88;font-size:9px;padding:3px 6px;border:1px dashed #00ff8855;border-radius:3px;text-align:center">+ New</div>
+          </div>
+          <div style="flex:1;padding:8px;overflow:hidden">
+            <div style="display:flex;gap:6px;margin-bottom:6px">
+              <div style="flex:1">
+                <div style="color:#555;font-size:8px;margin-bottom:2px">ID</div>
+                <div style="background:#0d0d1a;border:1px solid #333;border-radius:3px;padding:3px 5px;color:#ccc;font-size:9px">deploy-check</div>
+              </div>
+              <div style="flex:1">
+                <div style="color:#555;font-size:8px;margin-bottom:2px">Name</div>
+                <div style="background:#0d0d1a;border:1px solid #333;border-radius:3px;padding:3px 5px;color:#ccc;font-size:9px">Deploy Check</div>
+              </div>
+            </div>
+            <div style="color:#555;font-size:8px;margin-bottom:3px">Commands</div>
+            <div style="background:#0d0d1a;border:1px solid #333;border-radius:3px;padding:4px 5px;margin-bottom:3px;font-size:9px">
+              <div style="color:#888;font-size:8px;margin-bottom:1px">Label</div>
+              <div style="color:#ccc">Status Check</div>
+              <div style="color:#888;font-size:8px;margin-top:2px;margin-bottom:1px">Template</div>
+              <div style="color:#00ff88;font-family:monospace">curl -s {{host}}/status</div>
+            </div>
+            <div style="color:#555;font-size:8px;margin-bottom:3px">Variables</div>
+            <div style="background:#0d0d1a;border:1px solid #333;border-radius:3px;padding:4px 5px;font-size:9px;display:flex;gap:8px">
+              <div><div style="color:#888;font-size:8px">Name</div><div style="color:#ccc">host</div></div>
+              <div><div style="color:#888;font-size:8px">Regex</div><div style="color:#f7c948;font-family:monospace">^[\w.-]+$</div></div>
+              <div><div style="color:#888;font-size:8px">Desc</div><div style="color:#555">hostname</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Split: job list + detail editor</h3>
+      <p>Left sidebar lists jobs, right panel edits the selected job. Familiar two-pane app layout.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;border-radius:6px;font-family:sans-serif;font-size:11px;overflow:hidden">
+        <div style="background:#0d0d1a;padding:6px 10px;border-bottom:1px solid #333;display:flex;justify-content:space-between">
+          <span style="color:#7eb8f7;font-weight:600">Jobs</span>
+          <span style="color:#00ff88;font-size:9px">+ New Job</span>
+        </div>
+        <div style="padding:8px">
+          <div style="background:#111;border:1px solid #2d2d4e;border-radius:4px;padding:7px;margin-bottom:5px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+              <span style="color:#ccc;font-weight:600;font-size:10px">Deploy Check</span>
+              <div style="display:flex;gap:6px">
+                <span style="color:#7eb8f7;font-size:9px">Edit</span>
+                <span style="color:#888;font-size:9px">▶ Run</span>
+              </div>
+            </div>
+            <div style="color:#555;font-size:9px;margin-bottom:3px">ID: deploy-check · 2 commands · 1 variable</div>
+            <div style="background:#0d0d1a;border-radius:3px;padding:3px 5px;font-family:monospace;font-size:9px;color:#888">?job=deploy-check&host=...</div>
+          </div>
+          <div style="background:#111;border:1px solid #333;border-radius:4px;padding:7px;margin-bottom:5px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+              <span style="color:#ccc;font-weight:600;font-size:10px">Log Tail</span>
+              <div style="display:flex;gap:6px">
+                <span style="color:#7eb8f7;font-size:9px">Edit</span>
+                <span style="color:#888;font-size:9px">▶ Run</span>
+              </div>
+            </div>
+            <div style="color:#555;font-size:9px">ID: log-tail · 1 command · 2 variables</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Card list with inline URL preview</h3>
+      <p>Jobs shown as cards with summary and URL template. Edit opens a full-screen form. URL is always visible for quick copy.</p>
+    </div>
+  </div>
+
+</div>
