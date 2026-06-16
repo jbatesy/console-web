@@ -68,15 +68,15 @@ func (m *Manager) Launch(jobID string, vars map[string]string) (*db.Session, []d
 		}
 
 		capturedID := paneID
-		m.ptyMgr.AddExitHook(func(id string) {
-			if id == capturedID {
-				m.store.SetPaneAlive(id, false)
-			}
-		})
-
 		if _, err := m.ptyMgr.Spawn(paneID, substituted, outputPath); err != nil {
 			m.store.SetPaneAlive(paneID, false)
 			pane.Alive = false
+		} else {
+			m.ptyMgr.AddExitHook(func(id string) {
+				if id == capturedID {
+					m.store.SetPaneAlive(id, false)
+				}
+			})
 		}
 
 		panes = append(panes, *pane)
@@ -97,7 +97,11 @@ func (m *Manager) Get(sessionID string) (*db.Session, []db.Pane, error) {
 	}
 	// Sync alive status from PTY manager (more accurate than DB for live panes)
 	for i := range panes {
-		panes[i].Alive = m.ptyMgr.IsAlive(panes[i].ID)
+		live := m.ptyMgr.IsAlive(panes[i].ID)
+		if panes[i].Alive && !live {
+			m.store.SetPaneAlive(panes[i].ID, false)
+		}
+		panes[i].Alive = live
 	}
 	return sess, panes, nil
 }
