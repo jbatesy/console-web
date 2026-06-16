@@ -69,6 +69,12 @@ func (m *Manager) Spawn(paneID, cmd, outputPath string) (string, error) {
 	}
 
 	m.mu.Lock()
+	if _, exists := m.panes[paneID]; exists {
+		m.mu.Unlock()
+		ptmx.Close()
+		outFile.Close()
+		return "", fmt.Errorf("pane %q already running", paneID)
+	}
 	m.panes[paneID] = ps
 	m.mu.Unlock()
 
@@ -152,7 +158,11 @@ func (m *Manager) AddClient(paneID string, conn *websocket.Conn, outputPath stri
 	go func() {
 		if data, err := os.ReadFile(outputPath); err == nil && len(data) > 0 {
 			sentinel := []byte("\r\n\033[33m--- scrollback start ---\033[0m\r\n")
-			ch <- sentinel
+			select {
+			case ch <- sentinel:
+			case <-ps.done:
+				return
+			}
 			// send in chunks to avoid oversized messages
 			for len(data) > 0 {
 				sz := 4096
@@ -161,7 +171,11 @@ func (m *Manager) AddClient(paneID string, conn *websocket.Conn, outputPath stri
 				}
 				chunk := make([]byte, sz)
 				copy(chunk, data[:sz])
-				ch <- chunk
+				select {
+				case ch <- chunk:
+				case <-ps.done:
+					return
+				}
 				data = data[sz:]
 			}
 		}
