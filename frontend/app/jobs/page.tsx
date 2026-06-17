@@ -20,7 +20,7 @@ export default function JobsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
-
+  const [pristine, setPristine] = useState<Job | null>(null);
   const isNew = form !== null && selectedId === null;
 
   const refreshJobs = useCallback(async () => {
@@ -30,6 +30,8 @@ export default function JobsPage() {
       setError(e instanceof Error ? e.message : String(e));
     }
   }, []);
+
+  
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -45,12 +47,24 @@ export default function JobsPage() {
       commands: (job.commands ?? []).map((c) => ({ ...c })),
       variables: (job.variables ?? []).map((v) => ({ ...v })),
     });
+    setPristine(normalizeJob(job));
   }
 
   function newJob() {
     setError(null);
     setSelectedId(null);
     setForm({ ...emptyJob, commands: [], variables: [] });
+    setPristine(normalizeJob(emptyJob));
+  }
+
+  // one canonical shape, used everywhere a Job enters the form
+  function normalizeJob(job: Job): Job {
+    return {
+      id: job.id.trim(),
+      name: job.name.trim(),
+      commands: (job.commands ?? []).map((c) => ({ ...c })),
+      variables: (job.variables ?? []).map((v) => ({ ...v })),
+    };
   }
 
   // --- form field updaters ---------------------------------------------------
@@ -82,15 +96,18 @@ export default function JobsPage() {
       variables: form.variables,
     };
     try {
-      const saved = isNew ? await createJob(job) : await updateJob(job);
+      const saved = isNew ? await createJob(job) : await updateJob(job); 
       setForm(saved);
       setSelectedId(saved.id);
       setError(null);
+      setPristine(normalizeJob(saved));
       await refreshJobs();
     } catch (e) {
       setError(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+
+
 
   async function remove() {
     if (!form || isNew) return;
@@ -100,6 +117,7 @@ export default function JobsPage() {
       setForm(null);
       setSelectedId(null);
       setError(null);
+      setPristine(normalizeJob(emptyJob));
       await refreshJobs();
     } catch (e) {
       const msg =
@@ -281,7 +299,8 @@ export default function JobsPage() {
             <div className="flex gap-2">
               <button
                 onClick={save}
-                className="rounded bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-black"
+                disabled={JSON.stringify(form) === JSON.stringify(pristine)}
+                className="rounded bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-black disabled:opacity-50 hover:bg-[var(--accent)]/90 disabled:hover:bg-[var(--accent)]"
               >
                 Save
               </button>
