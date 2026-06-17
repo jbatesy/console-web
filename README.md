@@ -37,6 +37,20 @@ localhost.
 
 ---
 
+## Screenshots
+
+**Browser-based job editor** (`/jobs`) — define commands and typed variables,
+then copy the launch URL:
+
+![Job editor](docs/images/editor.png)
+
+**Live session** — one xterm.js tab per command, running in a real PTY with
+scrollback replayed on reconnect:
+
+![Terminal session](docs/images/terminal.png)
+
+---
+
 ## Quick start
 
 Requires Go 1.26.4+ (the version pinned in `go.mod`). PTY support is Unix-only —
@@ -205,9 +219,6 @@ The HTTP layer composes an API `ServeMux` with a static file server: API routes,
 `/ws/*`, and `GET /?job=` are handled by the mux; bare `GET /` serves
 `index.html`, `GET /jobs` serves `editor.html`, and anything the mux 404s falls
 through to the embedded frontend assets.
-
-For the full design rationale, see
-[`docs/superpowers/specs/2026-06-16-terminal-emulator-design.md`](docs/superpowers/specs/2026-06-16-terminal-emulator-design.md).
 
 ---
 
