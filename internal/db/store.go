@@ -294,6 +294,11 @@ func (s *Store) SetPaneAlive(id string, alive bool) error {
 	return nil
 }
 
+func (s *Store) SetAllPanesAlive(alive bool) error {
+	_, err := s.db.Exec(`UPDATE panes SET alive=?`, alive)
+	return err
+}
+
 func (s *Store) SetPanePID(id string, pid int) error {
 	res, err := s.db.Exec(`UPDATE panes SET pid=? WHERE id=?`, pid, id)
 	if err != nil {
