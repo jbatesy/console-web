@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"console-web/internal/db"
 	"console-web/internal/pty"
+	"github.com/google/uuid"
 )
 
 type Manager struct {

@@ -1,12 +1,12 @@
 package pty_test
 
 import (
+	"console-web/internal/pty"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-	"console-web/internal/pty"
 )
 
 func TestScrollbackTrim(t *testing.T) {
