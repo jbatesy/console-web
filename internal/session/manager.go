@@ -69,15 +69,12 @@ func (m *Manager) Launch(jobID string, vars map[string]string) (*db.Session, []d
 			return nil, nil, fmt.Errorf("create pane: %w", err)
 		}
 
-<<<<<<< HEAD
 		if _, pid, perr := m.ptyMgr.Spawn(paneID, substituted, outputPath); perr != nil {
 			m.store.SetPaneAlive(paneID, false)
 			pane.Alive = false
 		} else {
 			pane.PID = pid
 			m.store.SetPanePID(pane.ID, pane.PID)
-=======
->>>>>>> origin/main
 		}
 
 		panes = append(panes, *pane)
