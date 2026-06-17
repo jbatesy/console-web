@@ -46,6 +46,12 @@ func main() {
 	}
 	defer store.Close()
 
+	// No PTYs survive a restart, so any pane still flagged alive in the DB is
+	// stale. Clear them up front before serving.
+	if err := store.SetAllPanesAlive(false); err != nil {
+		log.Fatalf("reset pane liveness: %v", err)
+	}
+
 	ptyMgr := pty.NewManager(*dataDir, *maxScrollback)
 	sessMgr := session.NewManager(store, ptyMgr, *dataDir)
 	h := api.NewHandler(store, sessMgr, ptyMgr)

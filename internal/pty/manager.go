@@ -29,8 +29,6 @@ type Manager struct {
 	panes         map[string]*paneState
 	dataDir       string
 	maxScrollback int64
-	exitHooksMu   sync.Mutex
-	exitHooks     []func(string)
 }
 
 func NewManager(dataDir string, maxScrollback int64) *Manager {
@@ -39,12 +37,6 @@ func NewManager(dataDir string, maxScrollback int64) *Manager {
 		dataDir:       dataDir,
 		maxScrollback: maxScrollback,
 	}
-}
-
-func (m *Manager) AddExitHook(fn func(paneID string)) {
-	m.exitHooksMu.Lock()
-	m.exitHooks = append(m.exitHooks, fn)
-	m.exitHooksMu.Unlock()
 }
 
 // Spawn starts bash -c cmd for paneID, appending output to outputPath.
@@ -91,13 +83,6 @@ func (m *Manager) readLoop(paneID string, ps *paneState, outFile *os.File, cmd *
 		m.mu.Lock()
 		delete(m.panes, paneID)
 		m.mu.Unlock()
-		m.exitHooksMu.Lock()
-		hooks := make([]func(string), len(m.exitHooks))
-		copy(hooks, m.exitHooks)
-		m.exitHooksMu.Unlock()
-		for _, fn := range hooks {
-			fn(paneID)
-		}
 	}()
 
 	buf := make([]byte, 4096)
