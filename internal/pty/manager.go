@@ -41,17 +41,17 @@ func NewManager(dataDir string, maxScrollback int64) *Manager {
 
 // Spawn starts bash -c cmd for paneID, appending output to outputPath.
 // Returns paneID on success.
-func (m *Manager) Spawn(paneID, cmd, outputPath string) (string, error) {
+func (m *Manager) Spawn(paneID, cmd, outputPath string) (string, int, error) {
 	c := exec.Command("bash", "-c", cmd)
 	ptmx, err := cpty.Start(c)
 	if err != nil {
-		return "", fmt.Errorf("pty start: %w", err)
+		return "", 0, fmt.Errorf("pty start: %w", err)
 	}
 
 	outFile, err := os.OpenFile(outputPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		ptmx.Close()
-		return "", fmt.Errorf("open output file: %w", err)
+		return "", 0, fmt.Errorf("open output file: %w", err)
 	}
 
 	ps := &paneState{
@@ -65,14 +65,14 @@ func (m *Manager) Spawn(paneID, cmd, outputPath string) (string, error) {
 		m.mu.Unlock()
 		ptmx.Close()
 		outFile.Close()
-		return "", fmt.Errorf("pane %q already running", paneID)
+		return "", 0, fmt.Errorf("pane %q already running", paneID)
 	}
 	m.panes[paneID] = ps
 	m.mu.Unlock()
 
 	go m.readLoop(paneID, ps, outFile, c)
 
-	return paneID, nil
+	return paneID, c.Process.Pid, nil
 }
 
 func (m *Manager) readLoop(paneID string, ps *paneState, outFile *os.File, cmd *exec.Cmd) {

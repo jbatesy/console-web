@@ -9,6 +9,7 @@ import (
 
 	"console-web/internal/db"
 	"console-web/internal/pty"
+
 	"github.com/google/uuid"
 )
 
@@ -62,14 +63,18 @@ func (m *Manager) Launch(jobID string, vars map[string]string) (*db.Session, []d
 			CmdIndex:   i,
 			Alive:      true,
 			OutputPath: outputPath,
+			PID:        0, // will be updated after spawn
 		}
 		if err := m.store.CreatePane(pane); err != nil {
 			return nil, nil, fmt.Errorf("create pane: %w", err)
 		}
 
-		if _, err := m.ptyMgr.Spawn(paneID, substituted, outputPath); err != nil {
+		if _, pid, perr := m.ptyMgr.Spawn(paneID, substituted, outputPath); perr != nil {
 			m.store.SetPaneAlive(paneID, false)
 			pane.Alive = false
+		} else {
+			pane.PID = pid
+			m.store.SetPanePID(pane.ID, pane.PID)
 		}
 
 		panes = append(panes, *pane)
