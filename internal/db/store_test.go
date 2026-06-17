@@ -1,8 +1,8 @@
 package db_test
 
 import (
-	"testing"
 	"console-web/internal/db"
+	"testing"
 )
 
 func newTestStore(t *testing.T) *db.Store {

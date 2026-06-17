@@ -2,15 +2,15 @@ package api_test
 
 import (
 	"bytes"
+	"console-web/internal/api"
+	"console-web/internal/db"
+	"console-web/internal/pty"
+	"console-web/internal/session"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"console-web/internal/api"
-	"console-web/internal/db"
-	"console-web/internal/pty"
-	"console-web/internal/session"
 )
 
 func newTestHandler(t *testing.T) (*api.Handler, *db.Store) {
@@ -100,9 +100,9 @@ func TestJobLaunchRedirect(t *testing.T) {
 	h, store := newTestHandler(t)
 	mux := h.Routes()
 	store.CreateJob(&db.Job{
-		ID:   "greet",
-		Name: "Greet",
-		Commands: []db.Command{{Label: "Hi", Template: "echo {{name}}"}},
+		ID:        "greet",
+		Name:      "Greet",
+		Commands:  []db.Command{{Label: "Hi", Template: "echo {{name}}"}},
 		Variables: []db.Variable{{Name: "name", Regex: `^\w+$`}},
 	})
 
@@ -122,9 +122,9 @@ func TestJobLaunchValidationError(t *testing.T) {
 	h, store := newTestHandler(t)
 	mux := h.Routes()
 	store.CreateJob(&db.Job{
-		ID:   "greet",
-		Name: "Greet",
-		Commands: []db.Command{{Label: "Hi", Template: "echo {{name}}"}},
+		ID:        "greet",
+		Name:      "Greet",
+		Commands:  []db.Command{{Label: "Hi", Template: "echo {{name}}"}},
 		Variables: []db.Variable{{Name: "name", Regex: `^\w+$`}},
 	})
 
