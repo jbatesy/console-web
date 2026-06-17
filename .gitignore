@@ -2,3 +2,13 @@
 docs/superpowers
 .superpowers/
 data/
+
+# build output / local runtime state
+/console-web
+/console-web.db
+
+# Next.js frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
