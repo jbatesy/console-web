@@ -23,7 +23,10 @@ func init() {
 	mime.AddExtensionType(".css", "text/css")
 }
 
-//go:embed frontend
+// all: is required so the Next.js export's _next/ directory (underscore-prefixed,
+// which plain go:embed excludes) is bundled into the binary.
+//
+//go:embed all:frontend/out
 var frontendFS embed.FS
 
 func main() {
@@ -50,23 +53,27 @@ func main() {
 	mux := h.Routes()
 	h.RegisterWS(mux)
 
-	// Serve frontend static files
-	sub, err := fs.Sub(frontendFS, "frontend")
+	// Serve the statically-exported Next.js frontend (next build → frontend/out).
+	sub, err := fs.Sub(frontendFS, "frontend/out")
 	if err != nil {
 		log.Fatalf("frontend fs: %v", err)
 	}
 	fileServer := http.FileServer(http.FS(sub))
 
-	// Wrap the mux: fall through to file server for GET / (no ?job=) and /jobs
+	// Wrap the mux: serve the SPA shells for the app routes, let the mux handle
+	// /api/*, /ws/*, and GET / with ?job=, and fall through to the file server
+	// for hashed assets (/_next/*) and anything else.
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Let the API mux handle /api/*, /ws/*, and GET / with ?job= param
-		// For bare GET / and GET /jobs, serve index.html / editor.html
-		if r.URL.Path == "/" && r.URL.RawQuery == "" {
+		// Bare app shell — but not when launching a job (?job=...), which the
+		// mux's index handler must validate and redirect.
+		if r.URL.Path == "/" && r.URL.Query().Get("job") == "" {
 			http.ServeFileFS(w, r, sub, "index.html")
 			return
 		}
-		if r.URL.Path == "/jobs" {
-			http.ServeFileFS(w, r, sub, "editor.html")
+		// Job editor page. trailingSlash:true exports it at out/jobs/index.html;
+		// accept both /jobs and /jobs/.
+		if r.URL.Path == "/jobs" || r.URL.Path == "/jobs/" {
+			http.ServeFileFS(w, r, sub, "jobs/index.html")
 			return
 		}
 		// Try API mux first; if it returns 404, try file server.
