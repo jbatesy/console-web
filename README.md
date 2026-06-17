@@ -32,8 +32,10 @@ localhost.
 - **Server-side variable validation** — each variable has a regex; raw values
   never reach the shell, only the fully substituted command does.
 - **Browser-based job editor** — create and edit jobs at `/jobs`.
-- **Self-contained** — frontend (including xterm.js) is embedded via `go:embed`;
-  SQLite is pure Go (`modernc.org/sqlite`), so there's no CGO and no build step.
+- **Self-contained binary** — the frontend (a statically-exported Next.js app,
+  including xterm.js) is embedded via `go:embed`, and SQLite is pure Go
+  (`modernc.org/sqlite`), so the result is a single CGO-free binary. Building it
+  from source requires a one-time Node step to produce the static export.
 
 ---
 
@@ -53,23 +55,27 @@ scrollback replayed on reconnect:
 
 ## Quick start
 
-Requires Go 1.26.4+ (the version pinned in `go.mod`). PTY support is Unix-only —
-macOS and Linux are supported; Windows is not.
+Requires Go 1.26.4+ (the version pinned in `go.mod`) and Node.js 20.9+ (Node 22
+recommended) to build the embedded frontend. PTY support is Unix-only — macOS and
+Linux are supported; Windows is not.
 
 ```sh
 git clone https://github.com/jbatesy/console-web.git
 cd console-web
-go run .
+make build      # builds the Next.js static export, then the Go binary
+./console-web
 ```
 
 Then open <http://127.0.0.1:8080>. Visit `/jobs` to create your first job.
 
-To build a binary:
+`make build` runs `npm ci && npm run build` in `frontend/` to produce the static
+export at `frontend/out/` (which `go:embed` bundles into the binary), then runs
+`go build`. Once the export exists, plain `go run .` / `go build .` also work; run
+`make frontend` to rebuild the UI after frontend changes.
 
-```sh
-go build -o console-web .
-./console-web
-```
+> **Note:** `frontend/out/` is gitignored, so a bare `go build` in a fresh
+> checkout will fail until the frontend has been built. Use `make build` (or run
+> the `npm` build first).
 
 ---
 
@@ -193,11 +199,13 @@ console-web/
     validate/  vars.go     per-variable regex validation + {{var}} substitution
     api/       handlers.go HTTP handlers (jobs REST, job launch, sessions)
                ws.go       WebSocket ↔ PTY bridge
-  frontend/                vanilla JS + xterm.js, embedded via go:embed
-    index.html, app.js     tabbed terminal app shell
-    editor.html, editor.js job editor
-    style.css
-    xterm/                 vendored xterm.js + fit addon
+  frontend/                Next.js app (TypeScript + Tailwind), statically exported
+    app/page.tsx           tabbed terminal app shell (/)
+    app/jobs/page.tsx      job editor (/jobs)
+    components/            TerminalPane (xterm.js + WebSocket), Nav
+    lib/                   typed API client, types, session/backend helpers
+    out/                   `next build` output, embedded via go:embed (gitignored)
+  Makefile                 frontend + Go build/test targets
 ```
 
 **Data model:**
@@ -215,10 +223,11 @@ rows → substitute `{{vars}}` → spawn one `bash -c` PTY per pane → redirect
 session fragment. The PTY manager owns running processes in memory and reconciles
 `alive` status back into SQLite on reconnect.
 
-The HTTP layer composes an API `ServeMux` with a static file server: API routes,
-`/ws/*`, and `GET /?job=` are handled by the mux; bare `GET /` serves
-`index.html`, `GET /jobs` serves `editor.html`, and anything the mux 404s falls
-through to the embedded frontend assets.
+The HTTP layer composes an API `ServeMux` with a static file server over the
+embedded Next.js export (`frontend/out`): API routes, `/ws/*`, and `GET /?job=`
+are handled by the mux; bare `GET /` serves `index.html`, `GET /jobs[/]` serves
+`jobs/index.html`, and everything else (hashed `/_next/*` assets, etc.) is served
+from the export.
 
 ---
 
@@ -227,10 +236,17 @@ through to the embedded frontend assets.
 See [CONTRIBUTIONS.md](CONTRIBUTIONS.md) for how to set up, test, and contribute.
 
 ```sh
-go test ./...          # run the test suite
-go test -race ./...    # with the race detector
-gofmt -l .             # list unformatted files (should print nothing)
+make frontend                    # build the embedded static export (needed once)
+make test                        # go test -race ./... (ensures the export exists)
+gofmt -l $(git ls-files '*.go')  # list unformatted files (should print nothing)
 go vet ./...
+```
+
+For live frontend work, run the Go backend and the Next.js dev server together:
+
+```sh
+go run .       # backend (API/WS/PTY) on :8080
+make dev       # Next.js dev server on :3000, proxying /api and /ws to :8080
 ```
 
 ---

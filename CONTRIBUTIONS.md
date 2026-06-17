@@ -17,8 +17,12 @@ single binary, no required external services, minimal configuration.
   (`github.com/creack/pty`) is Unix-only; Windows is intentionally unsupported.
 - No C toolchain is needed. SQLite is provided by the pure-Go
   `modernc.org/sqlite`, so the project builds with `CGO_ENABLED=0`.
-- No Node or frontend build step. The frontend is vanilla JS embedded via
-  `go:embed`; xterm.js is vendored under `frontend/xterm/`.
+- **Node.js 20.9+ (Node 22 recommended)** — the frontend is a Next.js app under
+  `frontend/` that is statically exported (`next build`) to `frontend/out/` and
+  embedded into the binary via `go:embed`. The export must be built before
+  `go build`/`go test`, because `go:embed` needs `frontend/out` to exist. If your
+  system Node is older, install a compatible one with
+  [nvm](https://github.com/nvm-sh/nvm) (`nvm install 22 && nvm use 22`).
 
 ---
 
@@ -27,8 +31,16 @@ single binary, no required external services, minimal configuration.
 ```sh
 git clone https://github.com/jbatesy/console-web.git
 cd console-web
-go run .
+make build      # builds the frontend export, then the Go binary
+./console-web
 ```
+
+`make build` runs `npm ci && npm run build` in `frontend/` (producing
+`frontend/out/`, which is gitignored) and then `go build`. Once the export
+exists, plain `go run .` / `go build .` work too; run `make frontend` to rebuild
+the UI after frontend changes. For live frontend development, run the Go backend
+(`go run .`) and the Next.js dev server (`make dev`, on `:3000`) side by side —
+the dev server proxies `/api` and `/ws` to the backend on `:8080`.
 
 The server listens on `http://127.0.0.1:8080` by default. See the
 [README](README.md#configuration) for runtime flags. Running the server creates
@@ -48,8 +60,12 @@ internal/
   validate/  vars.go     per-variable regex validation, {{var}} substitution
   api/       handlers.go HTTP handlers (jobs REST, launch, sessions)
              ws.go       WebSocket ↔ PTY bridge
-frontend/                embedded UI (index/editor HTML+JS, style.css, xterm/)
+frontend/                Next.js app (TypeScript, Tailwind); statically exported
+  app/                   routes: / (terminal) and /jobs (editor)
+  components/, lib/      TerminalPane, typed API client, helpers
+  out/                   `next build` output, embedded via go:embed (gitignored)
 docs/                    design specs and implementation plans
+Makefile                 frontend + Go build/test targets
 ```
 
 Keep packages focused: persistence stays in `db`, process management in `pty`,
@@ -63,16 +79,21 @@ change substitution semantics.
 
 1. Branch off `main`. Don't commit directly to `main`.
 2. Make your change with a matching test (see below).
-3. Run the full local check suite before pushing:
+3. Run the full local check suite before pushing (build the frontend export
+   first so the `go:embed` in `main.go` resolves):
 
    ```sh
-   gofmt -l .          # must print nothing
+   make frontend                      # or: cd frontend && npm ci && npm run build
+   gofmt -l $(git ls-files '*.go')    # must print nothing
    go vet ./...
    go test -race ./...
    go build ./...
    ```
 
-4. Open a pull request. CI runs the same checks; all must pass.
+   If you touched the frontend, also run `cd frontend && npm run typecheck`.
+
+4. Open a pull request. CI runs the same checks (including the frontend build);
+   all must pass.
 
 ### Commit messages
 
@@ -112,7 +133,7 @@ go test -run TestTrimScrollback ./...  # one test
 ## Code style
 
 - **Formatting is non-negotiable:** `gofmt` must be clean. CI fails on any file
-  listed by `gofmt -l .`.
+  listed by `gofmt -l $(git ls-files '*.go')`.
 - Pass `go vet ./...` with no findings.
 - Match the surrounding code's naming and structure. Exported identifiers get doc
   comments (`// Name ...`); look at existing files for the cadence.
