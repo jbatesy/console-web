@@ -77,3 +77,25 @@ func TestSpawnAndOutput(t *testing.T) {
 		t.Errorf("output file missing expected string, got: %q", data)
 	}
 }
+
+func TestSpawnWritesAllChunks(t *testing.T) {
+	dir := t.TempDir()
+	m := pty.NewManager(dir, 1024*1024)
+
+	outPath := filepath.Join(dir, "out.log")
+	_, err := m.Spawn("pane-chunks", "for i in $(seq 1 200); do echo line-$i; done", outPath)
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	// Give the process time to write all output and exit.
+	time.Sleep(500 * time.Millisecond)
+
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if !strings.Contains(string(data), "line-1\r\n") || !strings.Contains(string(data), "line-200") {
+		t.Errorf("output file missing chunked lines, got %d bytes", len(data))
+	}
+}
