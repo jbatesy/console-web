@@ -49,6 +49,22 @@ func TestValidate_MissingVar(t *testing.T) {
 	}
 }
 
+func TestValidate_BarePatternRequiresFullMatch(t *testing.T) {
+	job := &db.Job{
+		Variables: []db.Variable{
+			{Name: "env", Regex: "prod"},
+		},
+	}
+	errs := validate.Vars(job, map[string]string{"env": "preprod"})
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for substring value, got %d: %+v", len(errs), errs)
+	}
+	errs = validate.Vars(job, map[string]string{"env": "prod"})
+	if len(errs) != 0 {
+		t.Errorf("expected exact match to pass, got %+v", errs)
+	}
+}
+
 func TestSubstitute(t *testing.T) {
 	result := validate.Substitute("curl -s {{host}}/status", map[string]string{"host": "myserver.local"})
 	if result != "curl -s myserver.local/status" {

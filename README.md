@@ -87,31 +87,46 @@ Go to `/jobs` and create a job, or `POST` one to the API:
 
 ```json
 {
-  "id": "deploy-check",
-  "name": "Deploy Check",
+  "id": "deploy",
+  "name": "Deploy",
   "commands": [
-    { "label": "Status", "template": "curl -s {{host}}/status" },
-    { "label": "Logs",   "template": "ssh {{host}} tail -f /var/log/{{service}}.log" }
+    {
+      "label": "Deploy",
+      "branches": [
+        { "when": { "env": "^prod$" },    "template": "kubectl --context=prod apply -f prod.yaml" },
+        { "when": { "env": "^staging$" }, "template": "kubectl --context=staging apply -f staging.yaml" },
+        { "default": true,                "template": "docker compose up" }
+      ]
+    },
+    { "label": "Always run", "template": "echo done" }
   ],
   "variables": [
-    { "name": "host",    "regex": "^[\\w.-]+$",   "description": "Target hostname" },
-    { "name": "service", "regex": "^[a-z0-9-]+$", "description": "Service name" }
+    { "name": "env", "regex": "^(prod|staging|dev)$", "description": "Target environment" }
   ]
 }
 ```
 
+Commands can also use **conditional branches** — multiple candidate templates
+selected at launch based on variable values. See
+[docs/conditional-commands.md](docs/conditional-commands.md) for the full
+schema and evaluation rules.
+
 - `id` is a URL-safe slug used in `?job=<id>`.
-- Each entry in `commands` becomes one terminal tab. `{{name}}` placeholders are
-  substituted server-side.
+- Each entry in `commands` becomes one terminal tab when it matches at launch.
+  Use a single `template` for unconditional commands, or a `branches` array for
+  conditional ones. `{{name}}` placeholders are substituted server-side.
+- Commands with no matching branch are skipped (no tab). If every command is
+  skipped, launch returns 422.
 - `variables` lists every placeholder used across the job's templates, each with
-  its own validation `regex` (a Go `regexp` pattern; the value must fully match).
+  its own validation `regex` (a Go `regexp` pattern; the value must fully match —
+  patterns are auto-anchored as `^(?:pattern)$` at evaluation time).
 
 ### 2. Launch it
 
 Visit:
 
 ```
-/?job=deploy-check&host=myserver.local&service=nginx
+/?job=deploy&env=staging
 ```
 
 The server:
@@ -120,9 +135,11 @@ The server:
 2. Validates each variable value against its regex. Any failure renders an HTML
    page listing which variables failed and the patterns they were expected to
    match.
-3. Creates a session and one pane per command, substitutes variables, and spawns
-   a PTY per pane.
-4. Redirects to `/#session=<session-id>`.
+3. Resolves each command's template (including conditional branches). Commands
+   with no matching branch are skipped. If every command is skipped, returns 422.
+4. Creates a session and one pane per resolved command, substitutes variables,
+   and spawns a PTY per pane.
+5. Redirects to `/#session=<session-id>`.
 
 The frontend reads the session id from the URL fragment, fetches the pane list,
 and opens an xterm.js terminal per pane wired to a WebSocket.
@@ -197,6 +214,7 @@ console-web/
     pty/       manager.go  spawn bash -c PTYs, broadcast to N clients, scrollback files
     session/   manager.go  create sessions, spawn panes, reconnect/alive sync
     validate/  vars.go     per-variable regex validation + {{var}} substitution
+               branches.go conditional branch resolution + command validation
     api/       handlers.go HTTP handlers (jobs REST, job launch, sessions)
                ws.go       WebSocket ↔ PTY bridge
   frontend/                Next.js app (TypeScript + Tailwind), statically exported
@@ -210,18 +228,20 @@ console-web/
 
 **Data model:**
 
-- **Job** — `id`, `name`, ordered `commands` (`label` + `template`), and
-  `variables` (`name` + `regex` + `description`). Stored in SQLite with
-  `commands`/`variables` as JSON columns.
+- **Job** — `id`, `name`, ordered `commands` (`label` + `template` or
+  `branches`), and `variables` (`name` + `regex` + `description`). Stored in
+  SQLite with `commands`/`variables` as JSON columns.
 - **Session** — created per launch: `id`, `job_id`, resolved `vars`,
   `created_at`. Never auto-deleted.
-- **Pane** — one per command: `id`, `session_id`, `cmd_index`, `pid`, `alive`,
+- **Pane** — one per resolved command: `id`, `session_id`, `cmd_index` (job
+  command index, stable when earlier commands are skipped), `pid`, `alive`,
   `output_path`. `alive` flips to false when the PTY exits.
 
-**Request flow on launch:** validate vars → create session row → create N pane
-rows → substitute `{{vars}}` → spawn one `bash -c` PTY per pane → redirect to the
-session fragment. The PTY manager owns running processes in memory and reconciles
-`alive` status back into SQLite on reconnect.
+**Request flow on launch:** validate vars → resolve branches per command → create
+session row → create pane rows for non-skipped commands → substitute `{{vars}}` →
+spawn one `bash -c` PTY per pane → redirect to the session fragment. The PTY
+manager owns running processes in memory and reconciles `alive` status back into
+SQLite on reconnect.
 
 The HTTP layer composes an API `ServeMux` with a static file server over the
 embedded Next.js export (`frontend/out`): API routes, `/ws/*`, and `GET /?job=`

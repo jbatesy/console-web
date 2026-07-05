@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -60,6 +61,15 @@ func (h *Handler) listJobs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, jobs)
 }
 
+func validateJobCommands(commands []db.Command, variables []db.Variable) error {
+	for i, cmd := range commands {
+		if err := validate.Command(cmd, variables); err != nil {
+			return fmt.Errorf("commands[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
 func (h *Handler) createJob(w http.ResponseWriter, r *http.Request) {
 	var job db.Job
 	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
@@ -68,6 +78,10 @@ func (h *Handler) createJob(w http.ResponseWriter, r *http.Request) {
 	}
 	if job.ID == "" {
 		http.Error(w, "id required", http.StatusBadRequest)
+		return
+	}
+	if err := validateJobCommands(job.Commands, job.Variables); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := h.store.CreateJob(&job); err != nil {
@@ -93,6 +107,10 @@ func (h *Handler) updateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job.ID = r.PathValue("id")
+	if err := validateJobCommands(job.Commands, job.Variables); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err := h.store.UpdateJob(&job); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -153,6 +171,40 @@ var errPageTmpl = template.Must(template.New("err").Parse(`<!DOCTYPE html>
 </body>
 </html>`))
 
+var noMatchPageTmpl = template.Must(template.New("nomatch").Parse(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>No Matching Commands</title>
+<style>
+  body{font-family:monospace;background:#1a1a2e;color:#ccc;padding:40px;max-width:700px;margin:auto}
+  h1{color:#ff6b6b}
+  a{color:#7eb8f7}
+</style>
+</head>
+<body>
+<h1>No Commands Matched</h1>
+<p>Job: <strong>{{.JobID}}</strong></p>
+<p>Every command was skipped because no conditional branch matched the supplied variable values.</p>
+<p><a href="/jobs">← Edit Jobs</a></p>
+</body>
+</html>`))
+
+var invalidRegexPageTmpl = template.Must(template.New("invalidregex").Parse(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Invalid Branch Regex</title>
+<style>
+  body{font-family:monospace;background:#1a1a2e;color:#ccc;padding:40px;max-width:700px;margin:auto}
+  h1{color:#ff6b6b}
+  a{color:#7eb8f7}
+</style>
+</head>
+<body>
+<h1>Invalid Branch Pattern</h1>
+<p>Job: <strong>{{.JobID}}</strong></p>
+<p>{{.Message}}</p>
+<p><a href="/jobs">← Edit Jobs</a></p>
+</body>
+</html>`))
+
 func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 	jobID := r.URL.Query().Get("job")
 	if jobID == "" {
@@ -184,6 +236,25 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 
 	sess, _, err := h.sessions.Launch(jobID, vars)
 	if err != nil {
+		if errors.Is(err, validate.ErrNoMatchingCommands) {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			if err := noMatchPageTmpl.Execute(w, map[string]any{"JobID": jobID}); err != nil {
+				log.Printf("error rendering no-match error page: %v", err)
+			}
+			return
+		}
+		if errors.Is(err, validate.ErrInvalidRegex) {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			if err := invalidRegexPageTmpl.Execute(w, map[string]any{
+				"JobID":   jobID,
+				"Message": err.Error(),
+			}); err != nil {
+				log.Printf("error rendering invalid-regex error page: %v", err)
+			}
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

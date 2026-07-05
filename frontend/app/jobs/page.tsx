@@ -8,19 +8,29 @@ import {
   listJobs,
   updateJob,
 } from "@/lib/api";
+import { isConditional } from "@/lib/branches";
+import { CommandEditor } from "@/components/jobs/CommandEditor";
 import type { Command, Job, Variable } from "@/lib/types";
 
 const emptyJob: Job = { id: "", name: "", commands: [], variables: [] };
 
+function prepareCommandForSave(cmd: Command): Command {
+  if (isConditional(cmd)) {
+    const { template: _, ...rest } = cmd;
+    return rest;
+  }
+  const { branches: _, ...rest } = cmd;
+  return { ...rest, template: cmd.template ?? "" };
+}
+
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
-  // `form` null = nothing open (empty state). `selectedId` null while `form` is
-  // set means a new (unsaved) job, so the ID field stays editable.
   const [form, setForm] = useState<Job | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
   const [pristine, setPristine] = useState<Job | null>(null);
+  const [testVars, setTestVars] = useState<Record<string, string>>({});
   const isNew = form !== null && selectedId === null;
 
   const refreshJobs = useCallback(async () => {
@@ -31,8 +41,6 @@ export default function JobsPage() {
     }
   }, []);
 
-  
-
   useEffect(() => {
     setOrigin(window.location.origin);
     refreshJobs();
@@ -41,13 +49,14 @@ export default function JobsPage() {
   function selectJob(job: Job) {
     setError(null);
     setSelectedId(job.id);
-    setForm({
-      id: job.id,
-      name: job.name,
-      commands: (job.commands ?? []).map((c) => ({ ...c })),
-      variables: (job.variables ?? []).map((v) => ({ ...v })),
-    });
-    setPristine(normalizeJob(job));
+    const normalized = normalizeJob(job);
+    setForm(normalized);
+    setPristine(normalized);
+    setTestVars(
+      Object.fromEntries(
+        (job.variables ?? []).filter((v) => v.name).map((v) => [v.name, ""]),
+      ),
+    );
   }
 
   function newJob() {
@@ -55,9 +64,9 @@ export default function JobsPage() {
     setSelectedId(null);
     setForm({ ...emptyJob, commands: [], variables: [] });
     setPristine(normalizeJob(emptyJob));
+    setTestVars({});
   }
 
-  // one canonical shape, used everywhere a Job enters the form
   function normalizeJob(job: Job): Job {
     return {
       id: job.id.trim(),
@@ -67,36 +76,42 @@ export default function JobsPage() {
     };
   }
 
-  // --- form field updaters ---------------------------------------------------
   function patch(p: Partial<Job>) {
     setForm((f) => (f ? { ...f, ...p } : f));
   }
-  function patchCmd(i: number, p: Partial<Command>) {
+
+  function patchCmd(i: number, cmd: Command) {
     setForm((f) =>
       f
-        ? { ...f, commands: f.commands.map((c, j) => (j === i ? { ...c, ...p } : c)) }
-        : f,
-    );
-  }
-  function patchVar(i: number, p: Partial<Variable>) {
-    setForm((f) =>
-      f
-        ? { ...f, variables: f.variables.map((v, j) => (j === i ? { ...v, ...p } : v)) }
+        ? {
+            ...f,
+            commands: f.commands.map((c, j) => (j === i ? cmd : c)),
+          }
         : f,
     );
   }
 
-  // --- actions ---------------------------------------------------------------
+  function patchVar(i: number, p: Partial<Variable>) {
+    setForm((f) =>
+      f
+        ? {
+            ...f,
+            variables: f.variables.map((v, j) => (j === i ? { ...v, ...p } : v)),
+          }
+        : f,
+    );
+  }
+
   async function save() {
     if (!form) return;
     const job: Job = {
       id: form.id.trim(),
       name: form.name.trim(),
-      commands: form.commands,
+      commands: form.commands.map(prepareCommandForSave),
       variables: form.variables,
     };
     try {
-      const saved = isNew ? await createJob(job) : await updateJob(job); 
+      const saved = isNew ? await createJob(job) : await updateJob(job);
       setForm(saved);
       setSelectedId(saved.id);
       setError(null);
@@ -106,8 +121,6 @@ export default function JobsPage() {
       setError(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-
-
 
   async function remove() {
     if (!form || isNew) return;
@@ -141,6 +154,8 @@ export default function JobsPage() {
 
   const inputCls =
     "w-full rounded border border-white/15 bg-black/30 px-2 py-1 text-sm outline-none focus:border-[var(--accent)]";
+
+  const namedVars = form?.variables.filter((v) => v.name) ?? [];
 
   return (
     <div className="flex h-[calc(100vh-41px)]">
@@ -205,41 +220,41 @@ export default function JobsPage() {
               />
             </div>
 
-            <section className="space-y-2">
+            <section className="space-y-3">
               <div className="flex items-center gap-3">
                 <span className="text-xs uppercase opacity-60">Commands</span>
                 <button
                   className="text-xs text-[var(--accent)]"
                   onClick={() =>
-                    patch({ commands: [...form.commands, { label: "", template: "" }] })
+                    patch({
+                      commands: [
+                        ...form.commands,
+                        { label: "", template: "" },
+                      ],
+                    })
                   }
                 >
                   + Add
                 </button>
               </div>
-              {form.commands.map((c, i) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    className={`${inputCls} w-40`}
-                    placeholder="Label"
-                    value={c.label}
-                    onChange={(e) => patchCmd(i, { label: e.target.value })}
-                  />
-                  <input
-                    className={`${inputCls} font-mono`}
-                    placeholder="Template: echo {{var}}"
-                    value={c.template}
-                    onChange={(e) => patchCmd(i, { template: e.target.value })}
-                  />
-                  <button
-                    className="px-2 text-red-400 hover:text-red-300"
-                    onClick={() =>
-                      patch({ commands: form.commands.filter((_, j) => j !== i) })
-                    }
-                  >
-                    ×
-                  </button>
-                </div>
+
+              {form.commands.map((cmd, cmdIdx) => (
+                <CommandEditor
+                  key={cmdIdx}
+                  command={cmd}
+                  namedVars={namedVars}
+                  testVars={testVars}
+                  inputCls={inputCls}
+                  onTestVarChange={(name, value) =>
+                    setTestVars((prev) => ({ ...prev, [name]: value }))
+                  }
+                  onChange={(updated) => patchCmd(cmdIdx, updated)}
+                  onRemove={() =>
+                    patch({
+                      commands: form.commands.filter((_, j) => j !== cmdIdx),
+                    })
+                  }
+                />
               ))}
             </section>
 
@@ -283,7 +298,9 @@ export default function JobsPage() {
                   <button
                     className="px-2 text-red-400 hover:text-red-300"
                     onClick={() =>
-                      patch({ variables: form.variables.filter((_, j) => j !== i) })
+                      patch({
+                        variables: form.variables.filter((_, j) => j !== i),
+                      })
                     }
                   >
                     ×

@@ -5,7 +5,7 @@ data/
 
 # build output / local runtime state
 /console-web
-/console-web.db
+/console-web.db*
 
 # Next.js frontend
 frontend/node_modules/

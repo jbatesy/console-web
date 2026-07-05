@@ -8,9 +8,16 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+type CommandBranch struct {
+	When     map[string]string `json:"when,omitempty"`
+	Default  bool              `json:"default,omitempty"`
+	Template string            `json:"template"`
+}
+
 type Command struct {
-	Label    string `json:"label"`
-	Template string `json:"template"`
+	Label    string          `json:"label"`
+	Template string          `json:"template,omitempty"`
+	Branches []CommandBranch `json:"branches,omitempty"`
 }
 
 type Variable struct {
