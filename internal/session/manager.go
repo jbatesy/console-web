@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"console-web/internal/db"
 	"console-web/internal/pty"
+	"console-web/internal/validate"
 
 	"github.com/google/uuid"
 )
@@ -31,6 +31,24 @@ func (m *Manager) Launch(jobID string, vars map[string]string) (*db.Session, []d
 		return nil, nil, fmt.Errorf("job %q: %w", jobID, err)
 	}
 
+	type resolved struct {
+		cmdIndex int
+		template string
+	}
+	var resolvedCmds []resolved
+	for i, cmd := range job.Commands {
+		tmpl, ok, err := validate.ResolveCommand(cmd, vars)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve command %d: %w", i, err)
+		}
+		if ok {
+			resolvedCmds = append(resolvedCmds, resolved{cmdIndex: i, template: tmpl})
+		}
+	}
+	if len(resolvedCmds) == 0 {
+		return nil, nil, validate.ErrNoMatchingCommands
+	}
+
 	if err := os.MkdirAll(filepath.Join(m.dataDir, "panes"), 0755); err != nil {
 		return nil, nil, err
 	}
@@ -46,7 +64,7 @@ func (m *Manager) Launch(jobID string, vars map[string]string) (*db.Session, []d
 	}
 
 	var panes []db.Pane
-	for i, cmd := range job.Commands {
+	for _, rc := range resolvedCmds {
 		paneID := uuid.New().String()
 		outputPath := filepath.Join(m.dataDir, "panes", paneID+".log")
 
@@ -55,12 +73,12 @@ func (m *Manager) Launch(jobID string, vars map[string]string) (*db.Session, []d
 			f.Close()
 		}
 
-		substituted := substituteVars(cmd.Template, vars)
+		substituted := validate.Substitute(rc.template, vars)
 
 		pane := &db.Pane{
 			ID:         paneID,
 			SessionID:  sess.ID,
-			CmdIndex:   i,
+			CmdIndex:   rc.cmdIndex,
 			Alive:      true,
 			OutputPath: outputPath,
 			PID:        0, // will be updated after spawn
@@ -102,14 +120,4 @@ func (m *Manager) Get(sessionID string) (*db.Session, []db.Pane, error) {
 		panes[i].Alive = live
 	}
 	return sess, panes, nil
-}
-
-// substituteVars replaces {{name}} placeholders in template with values from vars.
-// Reimplemented locally to avoid circular import with validate package.
-func substituteVars(template string, vars map[string]string) string {
-	result := template
-	for k, v := range vars {
-		result = strings.ReplaceAll(result, "{{"+k+"}}", v)
-	}
-	return result
 }

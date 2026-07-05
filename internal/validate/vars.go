@@ -1,7 +1,6 @@
 package validate
 
 import (
-	"regexp"
 	"strings"
 
 	"console-web/internal/db"
@@ -20,7 +19,7 @@ func Vars(job *db.Job, vars map[string]string) []Error {
 	var errs []Error
 	for _, v := range job.Variables {
 		val := vars[v.Name]
-		matched, err := regexp.MatchString(v.Regex, val)
+		matched, err := matchFull(v.Regex, val)
 		if err != nil || !matched {
 			errs = append(errs, Error{Name: v.Name, Value: val, Pattern: v.Regex})
 		}

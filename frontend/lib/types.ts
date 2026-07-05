@@ -1,8 +1,15 @@
 // Mirrors the JSON shapes emitted by the Go backend (internal/db/store.go).
 
+export interface CommandBranch {
+  when?: Record<string, string>;
+  default?: boolean;
+  template: string;
+}
+
 export interface Command {
   label: string;
-  template: string;
+  template?: string;
+  branches?: CommandBranch[];
 }
 
 export interface Variable {

@@ -185,3 +185,132 @@ func TestUpdateJob(t *testing.T) {
 		t.Errorf("name after update: %q", j.Name)
 	}
 }
+
+func TestCreateJobInvalidCommand(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := h.Routes()
+
+	body := `{"id":"bad","name":"Bad","commands":[{"label":"L"}],"variables":[]}`
+	req := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "template is required") {
+		t.Errorf("unexpected body: %s", w.Body.String())
+	}
+}
+
+func TestCreateJobUnknownWhenVariable(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := h.Routes()
+
+	body := `{"id":"bad","name":"Bad","commands":[{"label":"L","branches":[{"when":{"region":"^us$"},"template":"echo hi"}]}],"variables":[{"name":"env","regex":"^prod$","description":""}]}`
+	req := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "unknown variable \"region\"") {
+		t.Errorf("unexpected body: %s", w.Body.String())
+	}
+}
+
+func TestJobLaunchMatchingBranch(t *testing.T) {
+	h, store := newTestHandler(t)
+	mux := h.Routes()
+	store.CreateJob(&db.Job{
+		ID:   "deploy",
+		Name: "Deploy",
+		Commands: []db.Command{{
+			Label: "Deploy",
+			Branches: []db.CommandBranch{
+				{When: map[string]string{"env": "^prod$"}, Template: "echo prod"},
+				{When: map[string]string{"env": "^staging$"}, Template: "echo staging"},
+			},
+		}},
+		Variables: []db.Variable{{Name: "env", Regex: `^(prod|staging|dev)$`}},
+	})
+
+	req := httptest.NewRequest("GET", "/?job=deploy&env=staging", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusFound {
+		t.Fatalf("expected redirect, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestJobLaunchSkipsUnmatchedCommand(t *testing.T) {
+	h, store := newTestHandler(t)
+	mux := h.Routes()
+	store.CreateJob(&db.Job{
+		ID:   "mixed",
+		Name: "Mixed",
+		Commands: []db.Command{
+			{
+				Label: "Conditional",
+				Branches: []db.CommandBranch{
+					{When: map[string]string{"env": "^prod$"}, Template: "echo prod"},
+				},
+			},
+			{Label: "Always", Template: "echo always"},
+		},
+		Variables: []db.Variable{{Name: "env", Regex: `^(prod|staging|dev)$`}},
+	})
+
+	req := httptest.NewRequest("GET", "/?job=mixed&env=dev", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusFound {
+		t.Fatalf("expected redirect, got %d: %s", w.Code, w.Body.String())
+	}
+
+	loc := w.Header().Get("Location")
+	sessID := strings.TrimPrefix(loc, "/#session=")
+	req2 := httptest.NewRequest("GET", "/api/sessions/"+sessID, nil)
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("get session: %d", w2.Code)
+	}
+	var resp map[string]any
+	json.NewDecoder(w2.Body).Decode(&resp)
+	panes := resp["panes"].([]any)
+	if len(panes) != 1 {
+		t.Fatalf("expected 1 pane, got %d", len(panes))
+	}
+	pane := panes[0].(map[string]any)
+	if int(pane["cmd_index"].(float64)) != 1 {
+		t.Errorf("cmd_index: %v", pane["cmd_index"])
+	}
+}
+
+func TestJobLaunchAllCommandsSkipped(t *testing.T) {
+	h, store := newTestHandler(t)
+	mux := h.Routes()
+	store.CreateJob(&db.Job{
+		ID:   "skipall",
+		Name: "Skip All",
+		Commands: []db.Command{{
+			Label: "Only",
+			Branches: []db.CommandBranch{
+				{When: map[string]string{"env": "^prod$"}, Template: "echo prod"},
+			},
+		}},
+		Variables: []db.Variable{{Name: "env", Regex: `^(prod|staging|dev)$`}},
+	})
+
+	req := httptest.NewRequest("GET", "/?job=skipall&env=dev", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "No Commands Matched") {
+		t.Errorf("expected no-match page, got: %s", w.Body.String())
+	}
+}

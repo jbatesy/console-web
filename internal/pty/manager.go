@@ -93,7 +93,6 @@ func (m *Manager) readLoop(paneID string, ps *paneState, outFile *os.File, cmd *
 			copy(chunk, buf[:n])
 
 			outFile.Write(chunk)
-			outFile.Sync()
 			m.maybeTrim(outFile.Name())
 
 			ps.mu.Lock()

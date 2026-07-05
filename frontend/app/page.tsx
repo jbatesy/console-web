@@ -47,9 +47,9 @@ export default function Home() {
 
         if (cancelled) return;
         setPanes(
-          basePanes.map((p, idx) => ({
+          basePanes.map((p) => ({
             ...p,
-            label: labels[idx] || `Pane ${idx + 1}`,
+            label: labels[p.cmd_index] || `Pane ${p.cmd_index + 1}`,
           })),
         );
       } catch (err) {
