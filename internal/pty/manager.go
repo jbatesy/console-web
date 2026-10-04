@@ -29,6 +29,7 @@ type Manager struct {
 	panes         map[string]*paneState
 	dataDir       string
 	maxScrollback int64
+	onExit        func(paneID string)
 }
 
 func NewManager(dataDir string, maxScrollback int64) *Manager {
@@ -38,6 +39,10 @@ func NewManager(dataDir string, maxScrollback int64) *Manager {
 		maxScrollback: maxScrollback,
 	}
 }
+
+// SetOnExit registers a callback invoked (before the pane is removed from the
+// running set) when a pane's process terminates. Call before Spawn.
+func (m *Manager) SetOnExit(fn func(paneID string)) { m.onExit = fn }
 
 // Spawn starts bash -c cmd for paneID, appending output to outputPath.
 // Returns paneID on success.
@@ -79,6 +84,9 @@ func (m *Manager) readLoop(paneID string, ps *paneState, outFile *os.File, cmd *
 	defer func() {
 		outFile.Close()
 		ps.ptmx.Close()
+		if m.onExit != nil {
+			m.onExit(paneID)
+		}
 		close(ps.done)
 		m.mu.Lock()
 		delete(m.panes, paneID)

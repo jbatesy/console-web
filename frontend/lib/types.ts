@@ -32,6 +32,11 @@ export interface Pane {
   pid: number;
   alive: boolean;
   output_path: string;
+  /** Unix seconds the process ended (0 while running). */
+  ended_at: number;
+  /** Unix seconds the retained output is discarded (0 while running). */
+  expires_at: number;
+  expired: boolean;
 }
 
 // Shape of GET /api/sessions/{id} (internal/api/handlers.go getSession).

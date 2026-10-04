@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"embed"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"console-web/internal/api"
 	"console-web/internal/db"
@@ -34,6 +36,7 @@ func main() {
 	dbPath := flag.String("db", "./console-web.db", "SQLite database path")
 	dataDir := flag.String("data", "./data", "pane scrollback directory")
 	maxScrollback := flag.Int64("scrollback", 10*1024*1024, "max scrollback bytes per pane")
+	retention := flag.Duration("retention", session.DefaultRetention, "how long to keep a pane's output after its process exits")
 	flag.Parse()
 
 	if err := os.MkdirAll(*dataDir, 0755); err != nil {
@@ -53,7 +56,8 @@ func main() {
 	}
 
 	ptyMgr := pty.NewManager(*dataDir, *maxScrollback)
-	sessMgr := session.NewManager(store, ptyMgr, *dataDir)
+	sessMgr := session.NewManager(store, ptyMgr, *dataDir, *retention)
+	go sessMgr.RunJanitor(context.Background(), time.Minute)
 	h := api.NewHandler(store, sessMgr, ptyMgr)
 
 	mux := h.Routes()

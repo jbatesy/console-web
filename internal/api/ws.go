@@ -2,8 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"os"
+
+	"console-web/internal/session"
 
 	"github.com/gorilla/websocket"
 )
@@ -42,8 +46,8 @@ func (h *Handler) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	sendCh, doneCh, err := h.ptyMgr.AddClient(paneID, conn, pane.OutputPath)
 	if err != nil {
-		// PTY not running — send exited notification and close
-		conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"exited"}`))
+		// PTY not running — replay retained output (if any), then notify and close
+		h.replayEnded(conn, paneID)
 		return
 	}
 	defer h.ptyMgr.RemoveClient(paneID, conn)
@@ -91,4 +95,28 @@ func (h *Handler) handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	<-writeErr
+}
+
+// replayEnded streams the retained output of a pane whose process has
+// terminated, then reports "exited" — or "expired" once the retention window
+// has passed and the output is gone.
+func (h *Handler) replayEnded(conn *websocket.Conn, paneID string) {
+	path, err := h.sessions.PaneOutput(paneID)
+	if err == nil {
+		var data []byte
+		if data, err = os.ReadFile(path); err == nil {
+			for len(data) > 0 {
+				n := min(len(data), 32*1024)
+				if conn.WriteMessage(websocket.BinaryMessage, data[:n]) != nil {
+					return
+				}
+				data = data[n:]
+			}
+		}
+	}
+	if errors.Is(err, session.ErrOutputExpired) || errors.Is(err, os.ErrNotExist) {
+		conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"expired"}`))
+		return
+	}
+	conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"exited"}`))
 }

@@ -1,7 +1,10 @@
 package session
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -13,14 +16,95 @@ import (
 	"github.com/google/uuid"
 )
 
+// DefaultRetention is how long a pane's output stays viewable after its
+// process terminates.
+const DefaultRetention = time.Hour
+
+// ErrOutputExpired means the pane's retained output has been discarded.
+var ErrOutputExpired = errors.New("pane output expired")
+
 type Manager struct {
-	store   *db.Store
-	ptyMgr  *pty.Manager
-	dataDir string
+	store     *db.Store
+	ptyMgr    *pty.Manager
+	dataDir   string
+	retention time.Duration
+	now       func() time.Time
 }
 
-func NewManager(store *db.Store, ptyMgr *pty.Manager, dataDir string) *Manager {
-	return &Manager{store: store, ptyMgr: ptyMgr, dataDir: dataDir}
+func NewManager(store *db.Store, ptyMgr *pty.Manager, dataDir string, retention time.Duration) *Manager {
+	// Record the end time as soon as a process terminates so retention counts
+	// from then, not from the next time someone looks at the session.
+	ptyMgr.SetOnExit(func(paneID string) {
+		if err := store.SetPaneAlive(paneID, false); err != nil {
+			log.Printf("mark pane %s ended: %v", paneID, err)
+		}
+	})
+	return &Manager{store: store, ptyMgr: ptyMgr, dataDir: dataDir, retention: retention, now: time.Now}
+}
+
+// annotate fills the derived expiry fields of p.
+func (m *Manager) annotate(p *db.Pane) {
+	p.ExpiresAt, p.Expired = 0, false
+	if p.Alive {
+		return
+	}
+	if p.EndedAt > 0 {
+		p.ExpiresAt = p.EndedAt + int64(m.retention/time.Second)
+	}
+	p.Expired = p.OutputPath == "" || p.EndedAt == 0 || m.now().Unix() >= p.ExpiresAt
+}
+
+// PaneOutput returns the path of a pane's retained output file, or
+// ErrOutputExpired once it is past the retention window.
+func (m *Manager) PaneOutput(paneID string) (string, error) {
+	p, err := m.store.GetPane(paneID)
+	if err != nil {
+		return "", err
+	}
+	p.Alive = m.ptyMgr.IsAlive(paneID)
+	m.annotate(p)
+	if p.Expired {
+		return "", ErrOutputExpired
+	}
+	return p.OutputPath, nil
+}
+
+// Sweep deletes output files of panes that ended more than the retention
+// period ago.
+func (m *Manager) Sweep() {
+	panes, err := m.store.ListExpiredPanes(m.now().Add(-m.retention).Unix())
+	if err != nil {
+		log.Printf("sweep panes: %v", err)
+		return
+	}
+	panesDir := filepath.Join(m.dataDir, "panes")
+	for _, p := range panes {
+		// Only ever delete inside the panes directory.
+		if filepath.Dir(p.OutputPath) == panesDir {
+			if err := os.Remove(p.OutputPath); err != nil && !os.IsNotExist(err) {
+				log.Printf("remove %s: %v", p.OutputPath, err)
+				continue
+			}
+		}
+		if err := m.store.ClearPaneOutput(p.ID); err != nil {
+			log.Printf("clear pane output %s: %v", p.ID, err)
+		}
+	}
+}
+
+// RunJanitor sweeps expired output until ctx is cancelled.
+func (m *Manager) RunJanitor(ctx context.Context, interval time.Duration) {
+	m.Sweep()
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			m.Sweep()
+		}
+	}
 }
 
 // Launch creates a session for the given job+vars, spawns PTYs, and returns
@@ -114,6 +198,12 @@ func (m *Manager) Get(sessionID string) (*db.Session, []db.Pane, error) {
 			m.store.SetPaneAlive(panes[i].ID, false)
 		}
 		panes[i].Alive = live
+		if !live && panes[i].EndedAt == 0 {
+			if p, err := m.store.GetPane(panes[i].ID); err == nil {
+				panes[i].EndedAt = p.EndedAt
+			}
+		}
+		m.annotate(&panes[i])
 	}
 	return sess, panes, nil
 }

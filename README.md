@@ -27,6 +27,9 @@ localhost.
   Reconnecting reattaches to the live process and replays scrollback.
 - **Scrollback on disk** — every pane's output is appended to a file and replayed
   to new clients, then trimmed to a configurable size cap.
+- **Output kept for an hour after exit** — when a process terminates its output
+  stays viewable (in the open tab, and on reload) for `-retention` (default 1h),
+  after which the file is deleted.
 - **Multi-client** — multiple browsers can attach to the same pane; output is
   broadcast to all and input from any is forwarded to the PTY.
 - **Server-side variable validation** — each variable has a regex; raw values
@@ -149,7 +152,10 @@ and opens an xterm.js terminal per pane wired to a WebSocket.
 The session id lives in the URL fragment. Reload the page (or open the same
 `/#session=<id>` link elsewhere) to reattach to the running processes — the
 server replays each pane's scrollback, then resumes live output. Panes whose
-process has exited show an "exited" notification instead of a live terminal.
+process has exited replay their full output followed by a "process exited"
+notice, for up to an hour after exit (see `-retention`); after that the output
+is deleted and the pane just reports that it is no longer retained. An open tab
+keeps its scrollback after the process exits.
 
 ---
 
@@ -163,6 +169,7 @@ Configured entirely via CLI flags — no config file, no environment variables.
 | `-db`         | `./console-web.db`   | SQLite database file path                     |
 | `-data`       | `./data`             | Directory for pane scrollback files           |
 | `-scrollback` | `10485760` (10 MB)   | Max scrollback bytes per pane before trimming |
+| `-retention`  | `1h`                 | How long to keep a pane's output after its process exits |
 
 When a pane's scrollback file exceeds `-scrollback`, the manager keeps the most
 recent half and discards the rest, bounding disk usage.
@@ -196,11 +203,14 @@ WS   /ws/pane/{id}         Bidirectional terminal I/O for a pane
 - **Binary** — raw PTY bytes. Client→server is keystrokes; server→client is
   terminal output.
 - **Text** — JSON control messages, e.g. `{"type":"resize","cols":220,"rows":50}`.
-  The server emits `{"type":"exited"}` when the pane's process ends.
+  The server emits `{"type":"exited"}` when the pane's process ends, or
+  `{"type":"expired"}` when connecting to an ended pane whose retained output
+  has been deleted.
 
 On connect, the server first streams the pane's scrollback as binary frames
 (prefixed with a `--- scrollback start ---` sentinel), then switches to live
-output.
+output. For a pane that has already exited, it replays the retained output
+(no sentinel) and then sends `exited`/`expired`.
 
 ---
 
