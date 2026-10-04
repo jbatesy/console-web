@@ -7,7 +7,6 @@ import { wsUrl } from "@/lib/backend";
 
 interface TerminalPaneProps {
   paneId: string;
-  alive: boolean;
   active: boolean;
   /** Called when the pane's process exits (so the parent can mark the tab dead). */
   onExit: () => void;
@@ -15,7 +14,6 @@ interface TerminalPaneProps {
 
 export default function TerminalPane({
   paneId,
-  alive,
   active,
   onExit,
 }: TerminalPaneProps) {
@@ -65,11 +63,9 @@ export default function TerminalPane({
       termRef.current = term;
       fitRef.current = fit;
 
-      if (!alive) {
-        term.writeln("\r\n\x1b[2m[process exited]\x1b[0m");
-        return;
-      }
-
+      // Always connect: for a live pane the server streams scrollback + live
+      // output; for an ended pane it replays the retained output (kept for an
+      // hour after exit) and then reports "exited" or "expired".
       ws = new WebSocket(wsUrl(`/ws/pane/${paneId}`));
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
@@ -86,6 +82,11 @@ export default function TerminalPane({
             if (msg.type === "exited") {
               onExitRef.current();
               term.writeln("\r\n\x1b[2m[process exited]\x1b[0m");
+            } else if (msg.type === "expired") {
+              onExitRef.current();
+              term.writeln(
+                "\r\n\x1b[2m[process exited — output no longer retained]\x1b[0m",
+              );
             }
           } catch {
             // ignore malformed control frames
@@ -114,7 +115,9 @@ export default function TerminalPane({
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [paneId, alive]);
+    // Keyed on paneId only: when the process exits the terminal must keep its
+    // scrollback rather than being torn down and re-created.
+  }, [paneId]);
 
   // Refit when this pane becomes the active (visible) tab — fitting a hidden
   // (display:none) element measures zero.

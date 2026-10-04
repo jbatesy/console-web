@@ -125,7 +125,6 @@ export default function Home() {
           <TerminalPane
             key={pane.id}
             paneId={pane.id}
-            alive={pane.alive}
             active={idx === active}
             onExit={() => markDead(pane.id)}
           />

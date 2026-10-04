@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -47,6 +48,13 @@ type Pane struct {
 	PID        int    `json:"pid"`
 	Alive      bool   `json:"alive"`
 	OutputPath string `json:"output_path"`
+	// EndedAt is the unix time the process terminated (0 while running).
+	EndedAt int64 `json:"ended_at"`
+	// ExpiresAt is when the retained output is discarded (0 while running).
+	// Expired reports the output is already gone. Both are filled in by the
+	// session manager, not stored.
+	ExpiresAt int64 `json:"expires_at"`
+	Expired   bool  `json:"expired"`
 }
 
 type Store struct {
@@ -97,6 +105,18 @@ func (s *Store) migrate() error {
             output_path TEXT NOT NULL DEFAULT ''
         );
     `)
+	if err != nil {
+		return err
+	}
+
+	// ended_at was added after the first release; upgrade existing databases.
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('panes') WHERE name='ended_at'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		_, err = s.db.Exec(`ALTER TABLE panes ADD COLUMN ended_at INTEGER NOT NULL DEFAULT 0`)
+	}
 	return err
 }
 
@@ -254,10 +274,10 @@ func (s *Store) CreatePane(p *Pane) error {
 
 func (s *Store) GetPane(id string) (*Pane, error) {
 	row := s.db.QueryRow(
-		`SELECT id, session_id, cmd_index, pid, alive, output_path FROM panes WHERE id=?`, id,
+		`SELECT id, session_id, cmd_index, pid, alive, output_path, ended_at FROM panes WHERE id=?`, id,
 	)
 	var p Pane
-	if err := row.Scan(&p.ID, &p.SessionID, &p.CmdIndex, &p.PID, &p.Alive, &p.OutputPath); err != nil {
+	if err := row.Scan(&p.ID, &p.SessionID, &p.CmdIndex, &p.PID, &p.Alive, &p.OutputPath, &p.EndedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("pane not found")
 		}
@@ -268,7 +288,7 @@ func (s *Store) GetPane(id string) (*Pane, error) {
 
 func (s *Store) ListPanes(sessionID string) ([]Pane, error) {
 	rows, err := s.db.Query(
-		`SELECT id, session_id, cmd_index, pid, alive, output_path FROM panes WHERE session_id=? ORDER BY cmd_index`,
+		`SELECT id, session_id, cmd_index, pid, alive, output_path, ended_at FROM panes WHERE session_id=? ORDER BY cmd_index`,
 		sessionID,
 	)
 	if err != nil {
@@ -278,7 +298,7 @@ func (s *Store) ListPanes(sessionID string) ([]Pane, error) {
 	panes := []Pane{}
 	for rows.Next() {
 		var p Pane
-		if err := rows.Scan(&p.ID, &p.SessionID, &p.CmdIndex, &p.PID, &p.Alive, &p.OutputPath); err != nil {
+		if err := rows.Scan(&p.ID, &p.SessionID, &p.CmdIndex, &p.PID, &p.Alive, &p.OutputPath, &p.EndedAt); err != nil {
 			return nil, err
 		}
 		panes = append(panes, p)
@@ -286,8 +306,19 @@ func (s *Store) ListPanes(sessionID string) ([]Pane, error) {
 	return panes, rows.Err()
 }
 
+// SetPaneAlive flips liveness. Marking a pane dead stamps ended_at (once) so
+// its output can be retained for a grace period; marking it alive clears it.
 func (s *Store) SetPaneAlive(id string, alive bool) error {
-	res, err := s.db.Exec(`UPDATE panes SET alive=? WHERE id=?`, alive, id)
+	var res sql.Result
+	var err error
+	if alive {
+		res, err = s.db.Exec(`UPDATE panes SET alive=1, ended_at=0 WHERE id=?`, id)
+	} else {
+		res, err = s.db.Exec(
+			`UPDATE panes SET alive=0, ended_at=CASE WHEN ended_at=0 THEN ? ELSE ended_at END WHERE id=?`,
+			time.Now().Unix(), id,
+		)
+	}
 	if err != nil {
 		return err
 	}
@@ -302,7 +333,43 @@ func (s *Store) SetPaneAlive(id string, alive bool) error {
 }
 
 func (s *Store) SetAllPanesAlive(alive bool) error {
-	_, err := s.db.Exec(`UPDATE panes SET alive=?`, alive)
+	if alive {
+		_, err := s.db.Exec(`UPDATE panes SET alive=1, ended_at=0`)
+		return err
+	}
+	_, err := s.db.Exec(
+		`UPDATE panes SET alive=0, ended_at=CASE WHEN ended_at=0 THEN ? ELSE ended_at END`,
+		time.Now().Unix(),
+	)
+	return err
+}
+
+// ListExpiredPanes returns dead panes that still reference an output file and
+// ended at or before cutoff (unix seconds). Dead panes with no end time
+// (pre-retention data) count as expired.
+func (s *Store) ListExpiredPanes(cutoff int64) ([]Pane, error) {
+	rows, err := s.db.Query(
+		`SELECT id, session_id, cmd_index, pid, alive, output_path, ended_at FROM panes
+		 WHERE alive=0 AND output_path<>'' AND ended_at<=?`, cutoff,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var panes []Pane
+	for rows.Next() {
+		var p Pane
+		if err := rows.Scan(&p.ID, &p.SessionID, &p.CmdIndex, &p.PID, &p.Alive, &p.OutputPath, &p.EndedAt); err != nil {
+			return nil, err
+		}
+		panes = append(panes, p)
+	}
+	return panes, rows.Err()
+}
+
+// ClearPaneOutput forgets a pane's output file after it has been deleted.
+func (s *Store) ClearPaneOutput(id string) error {
+	_, err := s.db.Exec(`UPDATE panes SET output_path='' WHERE id=?`, id)
 	return err
 }
 

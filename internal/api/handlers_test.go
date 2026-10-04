@@ -22,7 +22,7 @@ func newTestHandler(t *testing.T) (*api.Handler, *db.Store) {
 	t.Cleanup(func() { store.Close() })
 	dataDir := t.TempDir()
 	ptyMgr := pty.NewManager(dataDir, 1024*1024)
-	sessMgr := session.NewManager(store, ptyMgr, dataDir)
+	sessMgr := session.NewManager(store, ptyMgr, dataDir, session.DefaultRetention)
 	return api.NewHandler(store, sessMgr, ptyMgr), store
 }
 
