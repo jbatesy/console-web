@@ -58,12 +58,15 @@ func TestSpawnAndOutput(t *testing.T) {
 	m := pty.NewManager(dir, 1024*1024)
 
 	outPath := filepath.Join(dir, "out.log")
-	paneID, err := m.Spawn("pane-test", "echo hello-from-pty", outPath)
+	paneID, pid, err := m.Spawn("pane-test", "echo hello-from-pty", outPath)
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
 	if paneID != "pane-test" {
 		t.Errorf("paneID: %q", paneID)
+	}
+	if pid == 0 {
+		t.Errorf("expected non-zero PID, got 0")
 	}
 
 	// Give the process time to write output and exit
